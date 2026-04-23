@@ -5,24 +5,74 @@ from .base import Agent
 from typing import Optional, Dict, Any
 
 class CodeGenMockAgent(Agent):
+    """
+    An impressive mock agent that produces high-quality, highly-reasoned code.
+    """
     def run(self, task: str, context: Optional[Dict[str, Any]] = None) -> str:
-        if "Decompose" in self.system_prompt:
-            return "1. Create main.py with basic math functions\n2. Create test_main.py"
-        elif "main.py" in task:
-            return """I will implement the math functions.
-[FILE_ACTION] CREATE main.py [CONTENT]
-def add(a, b):
-    return a + b
+        if "Archon" in self.name or "Decompose" in self.system_prompt:
+            return """STEP: Design the core DistributedLock class with Redis-based TTL and atomic operations. | AGENT: Architect | TOOLS: FileSystem
+STEP: Implement safety mechanisms: retry-on-failure, context manager support, and heartbeats. | AGENT: Engineer | TOOLS: Shell
+STEP: Write a comprehensive unit test suite to verify re-entrancy and dead-lock prevention. | AGENT: Tester | TOOLS: pytest"""
 
-def subtract(a, b):
-    return a - b
+        elif "DistributedLock" in task or "Design" in task:
+            return """# Reasoning Process:
+# 1. Selection of Redis as the backend for shared state across distributed nodes.
+# 2. Use of SET with NX (Set-if-Not-Exists) and PX (Milliseconds TTL) for atomicity.
+# 3. Lua scripting to ensure the 'Release' operation is atomic and only unlocks owned locks.
+# 4. Context Manager pattern for guaranteed release.
 
-if __name__ == "__main__":
-    print(f"2 + 3 = {add(2, 3)}")
+[FILE_ACTION] CREATE dlock.py [CONTENT]
+import uuid
+import time
+import redis
+from typing import Optional
+from contextlib import contextmanager
+
+class DistributedLock:
+    \"\"\"
+    A production-grade distributed lock implementation using Redis.
+    Provides mutual exclusion across multiple nodes with automatic expiration
+    and atomic safety checks.
+    \"\"\"
+    def __init__(self, redis_client: redis.Redis, name: str, timeout: int = 10):
+        self.redis = redis_client
+        self.name = f"lock:{name}"
+        self.timeout = timeout
+        self.id = str(uuid.uuid4())
+
+    def acquire(self, blocking: bool = True, wait_time: float = 0.1) -> bool:
+        \"\"\"Attempts to acquire the lock atomically.\"\"\"
+        while True:
+            # PX: expire time in ms, NX: set only if not exists
+            if self.redis.set(self.name, self.id, px=int(self.timeout * 1000), nx=True):
+                return True
+            if not blocking:
+                return False
+            time.sleep(wait_time)
+
+    def release(self):
+        \"\"\"Releases the lock using a Lua script to ensure atomicity.\"\"\"
+        script = \"\"\"
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("del", KEYS[1])
+        else
+            return 0
+        end
+        \"\"\"
+        self.redis.eval(script, 1, self.name, self.id)
+
+    @contextmanager
+    def context(self):
+        \"\"\"Context manager for safe usage.\"\"\"
+        acquired = self.acquire()
+        try:
+            yield acquired
+        finally:
+            self.release()
 [/CONTENT] [/FILE_ACTION]
-Done."""
+Distributed lock implementation complete with atomic Lua release and UUID-based ownership validation."""
         else:
-            return "Task completed."
+            return "Task step completed successfully."
 
 def main():
     parser = argparse.ArgumentParser(description="OpenMythos Agentic CLI")

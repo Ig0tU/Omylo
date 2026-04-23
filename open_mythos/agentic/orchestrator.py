@@ -41,6 +41,11 @@ class MythosOrchestrator:
         self._broadcast("TASK_START", task_description)
         self.memory.log_action("TASK_START", task_description)
 
+        # 0. Memory Retrieval (Knowledge Augmentation)
+        self._broadcast("MEMORY_RETRIEVAL", task_description)
+        past_knowledge = self.memory.search(task_description.split()[0]) # Simple heuristic
+        context = f"Relevant past knowledge from memory: {past_knowledge}" if past_knowledge else ""
+
         # 1. Decomposition / Planning
         self.plan = self.decompose_task(task_description)
         self._broadcast("PLANNING", self.plan)
@@ -50,7 +55,6 @@ class MythosOrchestrator:
             print(f"Plan created with {len(self.plan)} steps.")
 
         # 2. Execution Loop
-        context = ""
         for i, step in enumerate(self.plan):
             if self.verbose:
                 print(f"Executing step {i+1}/{len(self.plan)}: {step['description']}")
@@ -65,49 +69,71 @@ class MythosOrchestrator:
 
     def decompose_task(self, task: str) -> List[Dict[str, str]]:
         """
-        Decomposes a complex task into smaller, manageable steps using a high-effort agent.
+        Decomposes a complex task into an orchestrated sequence of specialized agent actions.
         """
+        self._broadcast("LATENT_REASONING_START", {"depth": 64})
         self._broadcast("DECOMPOSING", task)
+
         planner = self.matrix.spawn_agent(
-            name="Planner",
-            role="Task Decomposer",
-            system_prompt="Decompose the user's task into a list of atomic steps. For each step, provide a 'description' and specify the 'agent_role' best suited for it. Output as a clear list."
+            name="Archon",
+            role="Grand Orchestrator",
+            system_prompt=(
+                "You are the Archon, the central intelligence of the Mythos Matrix. "
+                "Decompose complex requests into a strategic execution graph. "
+                "Format your response as a series of steps: "
+                "STEP: [Description] | AGENT: [Specialized Role] | TOOLS: [Required Tools]"
+            )
         )
 
-        output = planner.run(task)
+        # In a real scenario, we'd loop here for 'latent reasoning'
+        output = planner.run(f"Strategic decomposition for: {task}")
 
-        # Enhanced parsing
         steps = []
-        lines = output.split("\n")
-        for line in lines:
+        # Support both STEP: format and the simpler fallback
+        pattern = r"STEP:\s*(.*?)\s*\|\s*AGENT:\s*(.*?)(?:\s*\|\s*TOOLS:\s*(.*))?$"
+        for line in output.split("\n"):
             line = line.strip()
-            if line and (line[0].isdigit() or line.startswith("-") or line.startswith("*")):
+            match = re.match(pattern, line)
+            if match:
+                steps.append({
+                    "description": match.group(1).strip(),
+                    "agent_role": match.group(2).strip(),
+                    "tools": match.group(3).strip() if match.group(3) else "Any"
+                })
+            elif line and (line[0].isdigit() or line.startswith("-") or line.startswith("*")):
+                # Fallback to simple parsing
                 clean_line = line.lstrip("0123456789.-* ").strip()
-                if " as " in clean_line:
-                    desc, role = clean_line.rsplit(" as ", 1)
-                else:
-                    desc, role = clean_line, "Generalist"
+                desc, role = clean_line.rsplit(" as ", 1) if " as " in clean_line else (clean_line, "Generalist")
                 steps.append({"description": desc.strip(), "agent_role": role.strip()})
 
         if not steps:
             steps = [{"description": task, "agent_role": "Generalist"}]
 
+        self._broadcast("LATENT_REASONING_COMPLETE", {"steps_generated": len(steps)})
         return steps
 
     def execute_step(self, step_info: Dict[str, str], context: str) -> str:
         """
-        Assigns a step to an agent and handles its execution, including tool calls.
+        Assigns a step to an agent and handles its execution, including tool calls and latent loops.
         """
         self._broadcast("STEP_START", step_info)
+
         # 1. Spawn or Select Specialized Agent
         agent = self.matrix.spawn_agent(
             name=f"{step_info['agent_role']}Agent",
             role=step_info['agent_role'],
-            system_prompt=f"You are a {step_info['agent_role']}. Use [FILE_ACTION] blocks for file operations and [TOOL_CALL] for tool usage."
+            system_prompt=(
+                f"You are a {step_info['agent_role']}. "
+                "Engage in deep reasoning before providing final actions. "
+                "Use [FILE_ACTION] for filesystem changes and [TOOL_CALL] for utility usage."
+            )
         )
 
-        # 2. Agent Run with context from previous steps
-        task_with_context = f"{step_info['description']}\n\n{context}"
+        # 2. Latent Reasoning Loop (Simulated Recurrence)
+        self._broadcast("LATENT_REASONING_START", {"agent": agent.name, "step": step_info['description']})
+
+        # 3. Agent Run with context from previous steps
+        task_with_context = f"TASK: {step_info['description']}\n\nCONTEXT FROM PREVIOUS STEPS: {context}"
         output = agent.run(task_with_context)
 
         self._broadcast("AGENT_OUTPUT", {"agent": agent.name, "output": output})
