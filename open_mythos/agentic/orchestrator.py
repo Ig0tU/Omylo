@@ -1,5 +1,6 @@
 import re
-from typing import List, Dict, Any, Optional
+import requests
+from typing import List, Dict, Any, Optional, Callable
 from .base import Agent
 from .matrix import AgentMatrix
 from .swd import SWDEngine
@@ -11,25 +12,38 @@ class MythosOrchestrator:
     """
     The "God-in-a-app" orchestrator that coordinates a matrix of agents.
     """
-    def __init__(self, root_dir: str = ".", dry_run: bool = False, verbose: bool = False):
+    def __init__(self, root_dir: str = ".", dry_run: bool = False, verbose: bool = False, web_mode: bool = False):
         self.root_dir = root_dir
         self.dry_run = dry_run
         self.verbose = verbose
+        self.web_mode = web_mode
         self.matrix = AgentMatrix()
         self.swd = SWDEngine(root_dir)
         self.memory = MemoryManager(root_dir)
         self.metrics = MetricsManager(root_dir)
         self.tools = self.matrix.tools
         self.plan: List[Dict[str, str]] = []
+        self.event_callback: Optional[Callable[[str, Any], None]] = None
+
+    def _broadcast(self, event_type: str, data: Any):
+        if self.event_callback:
+            self.event_callback(event_type, data)
+        if self.web_mode:
+            try:
+                requests.post("http://127.0.0.1:8000/api/stream/update", json={"type": event_type, "data": data}, timeout=1)
+            except Exception:
+                pass
 
     def execute_task(self, task_description: str):
         """
         Decomposes a task, recursive plans, and orchestrates agents to complete it.
         """
+        self._broadcast("TASK_START", task_description)
         self.memory.log_action("TASK_START", task_description)
 
         # 1. Decomposition / Planning
         self.plan = self.decompose_task(task_description)
+        self._broadcast("PLANNING", self.plan)
         self.memory.log_action("PLANNING", str(self.plan))
 
         if self.verbose:
@@ -44,19 +58,20 @@ class MythosOrchestrator:
             output = self.execute_step(step, context)
             context = f"Previous step output: {output}"
 
+        self._broadcast("TASK_COMPLETE", task_description)
         self.memory.log_action("TASK_COMPLETE", task_description)
 
-        # Update session metrics (simplified)
         self.metrics.update_metrics(tokens=1000, cost=0.01)
 
     def decompose_task(self, task: str) -> List[Dict[str, str]]:
         """
         Decomposes a complex task into smaller, manageable steps using a high-effort agent.
         """
+        self._broadcast("DECOMPOSING", task)
         planner = self.matrix.spawn_agent(
             name="Planner",
             role="Task Decomposer",
-            system_prompt="Decompose the user's task into a list of atomic steps. For each step, provide a 'description' and specify the 'agent_role' (e.g., Coder, Reviewer, Researcher) best suited for it. Output as a clear list."
+            system_prompt="Decompose the user's task into a list of atomic steps. For each step, provide a 'description' and specify the 'agent_role' best suited for it. Output as a clear list."
         )
 
         output = planner.run(task)
@@ -67,7 +82,6 @@ class MythosOrchestrator:
         for line in lines:
             line = line.strip()
             if line and (line[0].isdigit() or line.startswith("-") or line.startswith("*")):
-                # Try to extract description and role
                 clean_line = line.lstrip("0123456789.-* ").strip()
                 if " as " in clean_line:
                     desc, role = clean_line.rsplit(" as ", 1)
@@ -84,6 +98,7 @@ class MythosOrchestrator:
         """
         Assigns a step to an agent and handles its execution, including tool calls.
         """
+        self._broadcast("STEP_START", step_info)
         # 1. Spawn or Select Specialized Agent
         agent = self.matrix.spawn_agent(
             name=f"{step_info['agent_role']}Agent",
@@ -95,9 +110,7 @@ class MythosOrchestrator:
         task_with_context = f"{step_info['description']}\n\n{context}"
         output = agent.run(task_with_context)
 
-        if self.verbose:
-            print(f"Agent ({agent.role}) output received.")
-
+        self._broadcast("AGENT_OUTPUT", {"agent": agent.name, "output": output})
         self.memory.log_action("AGENT_RUN", f"Agent {agent.name} (Role: {agent.role}) output:\n{output}")
 
         # 3. Handle Tool Calls
@@ -105,15 +118,20 @@ class MythosOrchestrator:
         for call in tool_calls:
             tool = self.tools.get_tool(call['name'])
             if tool:
+                self._broadcast("TOOL_CALL", call)
                 result = tool.execute(**call['params'])
+                self._broadcast("TOOL_RESULT", result)
                 self.memory.log_action("TOOL_RESULT", f"Tool {call['name']} result:\n{result}")
 
         # 4. SWD Verification
         actions = self.swd.parse_actions(output)
         for action in actions:
+            self._broadcast("SWD_VERIFY_START", action)
             result = self.swd.verify_and_execute(action, dry_run=self.dry_run)
+            self._broadcast("SWD_VERIFY_RESULT", result)
             self.memory.log_action("SWD_VERIFY", f"Action: {action['operation']} {action['path']}\nSuccess: {result['success']}\nError: {result['error']}")
 
+        self._broadcast("STEP_COMPLETE", step_info)
         return output
 
     def parse_tool_calls(self, output: str) -> List[Dict[str, Any]]:

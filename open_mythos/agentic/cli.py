@@ -1,6 +1,28 @@
 import argparse
 import sys
 from .orchestrator import MythosOrchestrator
+from .base import Agent
+from typing import Optional, Dict, Any
+
+class CodeGenMockAgent(Agent):
+    def run(self, task: str, context: Optional[Dict[str, Any]] = None) -> str:
+        if "Decompose" in self.system_prompt:
+            return "1. Create main.py with basic math functions\n2. Create test_main.py"
+        elif "main.py" in task:
+            return """I will implement the math functions.
+[FILE_ACTION] CREATE main.py [CONTENT]
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+if __name__ == "__main__":
+    print(f"2 + 3 = {add(2, 3)}")
+[/CONTENT] [/FILE_ACTION]
+Done."""
+        else:
+            return "Task completed."
 
 def main():
     parser = argparse.ArgumentParser(description="OpenMythos Agentic CLI")
@@ -11,6 +33,12 @@ def main():
     chat_parser.add_argument("task", type=str, help="The task for the orchestrator")
     chat_parser.add_argument("--dry-run", action="store_true", help="Preview file changes without executing")
     chat_parser.add_argument("--verbose", action="store_true", help="Show detailed execution traces")
+    chat_parser.add_argument("--mock", action="store_true", help="Use mock agent for demo")
+
+    # Web command
+    web_parser = subparsers.add_parser("web", help="Start the Mythos Latent WebUI")
+    web_parser.add_argument("--port", type=int, default=8000, help="Backend port")
+    web_parser.add_argument("--mock", action="store_true", help="Use mock agent for demo")
 
     # Verify command
     verify_parser = subparsers.add_parser("verify", help="Verify codebase against memory")
@@ -27,8 +55,18 @@ def main():
         parser.print_help()
         return
 
-    # Instantiate orchestrator only when needed to avoid overhead
+    if args.command == "web":
+        print(f"Starting Mythos Latent WebUI on port {args.port}...")
+        from .web.server import start_server, get_orchestrator
+        if args.mock:
+             orch = get_orchestrator()
+             orch.matrix.spawn_agent = lambda name, role, system_prompt: CodeGenMockAgent(name, role, system_prompt)
+        start_server(port=args.port)
+        return
+
     orchestrator = MythosOrchestrator(dry_run=getattr(args, 'dry_run', False), verbose=getattr(args, 'verbose', False))
+    if getattr(args, 'mock', False):
+        orchestrator.matrix.spawn_agent = lambda name, role, system_prompt: CodeGenMockAgent(name, role, system_prompt)
 
     if args.command == "chat":
         print(f"Starting orchestration for task: {args.task}")
@@ -36,7 +74,6 @@ def main():
         print("Task execution completed.")
     elif args.command == "verify":
         print("Verifying codebase integrity...")
-        # Get all memory entries
         entries = orchestrator.memory.search("%")
         reports = orchestrator.swd.verify_codebase(entries)
         for report in reports:

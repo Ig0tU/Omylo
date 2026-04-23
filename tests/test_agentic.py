@@ -61,4 +61,4 @@ class TestAgenticSystem(unittest.TestCase):
         self.assertIn("This is a test", results[0]["content"])
 
 if __name__ == "__main__":
-    unittest.main()
+    PYTHONPATH="." unittest.main()
