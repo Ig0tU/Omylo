@@ -35,12 +35,14 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
 ]
 
-
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 torch = "2.11.0"
 transformers = ">=4.40.0"
 datasets = ">=2.18.0"
+
+[tool.poetry.scripts]
+mythos = "open_mythos.agentic.cli:main"
 
 [tool.poetry.extras]
 flash = ["flash-attn"]
