@@ -36,13 +36,21 @@ def main():
         print("Task execution completed.")
     elif args.command == "verify":
         print("Verifying codebase integrity...")
-        # Add logic for verification
+        # Get all memory entries
+        entries = orchestrator.memory.search("%")
+        reports = orchestrator.swd.verify_codebase(entries)
+        for report in reports:
+            status_icon = "✅" if report["status"] == "VERIFIED" else "⚠️" if report["status"] == "DRIFT" else "❌"
+            print(f"{status_icon} {report['status']}: {report['path']} - {report['detail']}")
     elif args.command == "dream":
         print("Performing memory dreaming/compression...")
         orchestrator.memory.rebuild_index()
     elif args.command == "stats":
         print("Displaying budget and cost statistics...")
-        # Add logic for stats
+        stats = orchestrator.metrics.get_stats()
+        print(f"Total Sessions: {stats['sessions']}")
+        print(f"Total Tokens: {stats['total_tokens']:,}")
+        print(f"Total Estimated Cost: ${stats['total_cost']:.4f}")
     else:
         parser.print_help()
 

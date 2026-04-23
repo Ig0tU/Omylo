@@ -3,24 +3,25 @@ from .base import Agent, MythosAgent
 from ..main import OpenMythos
 from ..variants import mythos_1b
 from ..tokenizer import MythosTokenizer
+from .tools import ToolRegistry
 
 class AgentMatrix:
     """
     Manages a matrix of specialized agents.
     """
-    def __init__(self, model: Optional[OpenMythos] = None, tokenizer: Optional[MythosTokenizer] = None):
+    def __init__(self, model: Optional[OpenMythos] = None, tokenizer: Optional[MythosTokenizer] = None, tools: Optional[ToolRegistry] = None):
         self.agents: Dict[str, Agent] = {}
         self.model = model
         self.tokenizer = tokenizer
+        self.tools = tools if tools else ToolRegistry()
 
         if self.tokenizer is None:
             self.tokenizer = MythosTokenizer()
 
         if self.model is None:
             # Default to 1B model for demonstration if not provided
-            # In a real app, this should be explicitly managed
             cfg = mythos_1b()
-            cfg.vocab_size = self.tokenizer.vocab_size # Ensure vocab size matches tokenizer
+            cfg.vocab_size = self.tokenizer.vocab_size
             self.model = OpenMythos(cfg)
 
     def add_agent(self, agent: Agent):
@@ -40,7 +41,7 @@ class AgentMatrix:
         Spawns a new agent of a specified type.
         """
         if agent_type == "mythos":
-            agent = MythosAgent(name, role, system_prompt, self.model, self.tokenizer)
+            agent = MythosAgent(name, role, system_prompt, self.model, self.tokenizer, self.tools)
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
 

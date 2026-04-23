@@ -57,16 +57,10 @@ class MemoryManager:
 
         with open(self.memory_file, "r") as f:
             content = f.read()
-            # Basic parsing of MEMORY.md entries (simple split for now)
+            # Basic parsing of MEMORY.md entries
             entries = content.split("---")
             for entry in entries:
                 if entry.strip():
-                    # Extract timestamp and action_type from ## [timestamp] action_type
-                    # This is a simplified extraction
-                    lines = entry.strip().split("\n")
-                    header = lines[0]
-                    # ... more robust parsing logic ...
-                    # For now, just index the whole entry as content
                     cursor.execute("INSERT INTO memory_index (content, timestamp, tags) VALUES (?, ?, ?)", (entry.strip(), "", ""))
 
         conn.commit()
@@ -74,12 +68,15 @@ class MemoryManager:
 
     def search(self, query: str) -> List[Dict[str, Any]]:
         """
-        Searches the memory index.
+        Searches the memory index. If query is "%", returns all entries.
         """
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM memory_index WHERE memory_index MATCH ?", (query,))
+        if query == "%":
+            cursor.execute("SELECT * FROM memory_index")
+        else:
+            cursor.execute("SELECT * FROM memory_index WHERE memory_index MATCH ?", (query,))
         results = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return results

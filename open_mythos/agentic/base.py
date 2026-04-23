@@ -3,15 +3,17 @@ from typing import List, Dict, Any, Optional
 import torch
 from ..main import OpenMythos
 from ..tokenizer import MythosTokenizer
+from .tools import ToolRegistry
 
 class Agent(ABC):
     """
     Abstract base class for all agents in the OpenMythos ecosystem.
     """
-    def __init__(self, name: str, role: str, system_prompt: str):
+    def __init__(self, name: str, role: str, system_prompt: str, tools: Optional[ToolRegistry] = None):
         self.name = name
         self.role = role
         self.system_prompt = system_prompt
+        self.tools = tools
 
     @abstractmethod
     def run(self, task: str, context: Optional[Dict[str, Any]] = None) -> str:
@@ -24,8 +26,8 @@ class MythosAgent(Agent):
     """
     An agent powered by the OpenMythos local model.
     """
-    def __init__(self, name: str, role: str, system_prompt: str, model: OpenMythos, tokenizer: MythosTokenizer):
-        super().__init__(name, role, system_prompt)
+    def __init__(self, name: str, role: str, system_prompt: str, model: OpenMythos, tokenizer: MythosTokenizer, tools: Optional[ToolRegistry] = None):
+        super().__init__(name, role, system_prompt, tools)
         self.model = model
         self.tokenizer = tokenizer
 
@@ -33,7 +35,11 @@ class MythosAgent(Agent):
         """
         Runs the local OpenMythos model to generate a response.
         """
-        full_prompt = f"System: {self.system_prompt}\n"
+        tool_desc = ""
+        if self.tools:
+            tool_desc = "\nAvailable Tools:\n" + "\n".join([f"- {t['name']}: {t['description']}" for t in self.tools.list_tools()])
+
+        full_prompt = f"System: {self.system_prompt}{tool_desc}\n"
         if context:
             full_prompt += f"Context: {context}\n"
         full_prompt += f"User: {task}\nAssistant:"

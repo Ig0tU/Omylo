@@ -18,8 +18,11 @@ class SWDEngine:
         full_path = os.path.join(self.root_dir, filepath)
         if not os.path.exists(full_path):
             return None
-        with open(full_path, "rb") as f:
-            return hashlib.sha256(f.read()).hexdigest()
+        try:
+            with open(full_path, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest()
+        except Exception:
+            return None
 
     def parse_actions(self, output: str) -> List[Dict[str, Any]]:
         """
@@ -92,3 +95,35 @@ class SWDEngine:
             result["error"] = str(e)
 
         return result
+
+    def verify_codebase(self, memory_entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Scans the codebase and cross-references against recorded file actions in memory.
+        """
+        reports = []
+        recorded_files = {}
+
+        # 1. Collect latest recorded state for each file from memory
+        for entry in memory_entries:
+            actions = self.parse_actions(entry["content"])
+            for action in actions:
+                recorded_files[action["path"]] = action
+
+        # 2. Check each recorded file against the filesystem
+        for path, action in recorded_files.items():
+            full_path = os.path.join(self.root_dir, path)
+            exists = os.path.exists(full_path)
+
+            if action["operation"] == "DELETE":
+                if exists:
+                    reports.append({"path": path, "status": "DRIFT", "detail": "File exists but should have been deleted."})
+                else:
+                    reports.append({"path": path, "status": "VERIFIED", "detail": "File successfully deleted."})
+            else:
+                if not exists:
+                    reports.append({"path": path, "status": "MISSING", "detail": "File recorded in memory but missing from filesystem."})
+                else:
+                    # Optional: compare content if we have it in memory
+                    reports.append({"path": path, "status": "VERIFIED", "detail": "File exists as expected."})
+
+        return reports
