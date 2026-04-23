@@ -13,14 +13,15 @@ class AgentMatrix:
         self.model = model
         self.tokenizer = tokenizer
 
+        if self.tokenizer is None:
+            self.tokenizer = MythosTokenizer()
+
         if self.model is None:
             # Default to 1B model for demonstration if not provided
             # In a real app, this should be explicitly managed
             cfg = mythos_1b()
+            cfg.vocab_size = self.tokenizer.vocab_size # Ensure vocab size matches tokenizer
             self.model = OpenMythos(cfg)
-
-        if self.tokenizer is None:
-            self.tokenizer = MythosTokenizer()
 
     def add_agent(self, agent: Agent):
         """
