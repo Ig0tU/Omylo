@@ -109,7 +109,8 @@ const App = () => {
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.hostname}:8000/ws/state`);
+    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    const ws = new WebSocket(`${protocol}//${window.location.hostname}:${port}/ws/state`);
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       setLogs((prev) => [...prev, msg]);
