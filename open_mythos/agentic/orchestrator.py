@@ -12,11 +12,12 @@ class MythosOrchestrator:
     """
     The "God-in-a-app" orchestrator that coordinates a matrix of agents.
     """
-    def __init__(self, root_dir: str = ".", dry_run: bool = False, verbose: bool = False, web_mode: bool = False):
+    def __init__(self, root_dir: str = ".", dry_run: bool = False, verbose: bool = False, web_mode: bool = False, web_port: int = 8000):
         self.root_dir = root_dir
         self.dry_run = dry_run
         self.verbose = verbose
         self.web_mode = web_mode
+        self.web_port = web_port
         self.matrix = AgentMatrix()
         self.swd = SWDEngine(root_dir)
         self.memory = MemoryManager(root_dir)
@@ -30,7 +31,7 @@ class MythosOrchestrator:
             self.event_callback(event_type, data)
         if self.web_mode:
             try:
-                requests.post("http://127.0.0.1:8000/api/stream/update", json={"type": event_type, "data": data}, timeout=1)
+                requests.post(f"http://127.0.0.1:{self.web_port}/api/stream/update", json={"type": event_type, "data": data}, timeout=1)
             except Exception:
                 pass
 

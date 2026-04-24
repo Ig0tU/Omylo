@@ -15,6 +15,9 @@ class SWDEngine:
         """
         Calculates SHA-256 hash of a file.
         """
+        filepath = os.path.normpath(filepath).lstrip("/")
+        if ".." in filepath:
+            return None
         full_path = os.path.join(self.root_dir, filepath)
         if not os.path.exists(full_path):
             return None
@@ -48,8 +51,13 @@ class SWDEngine:
         Verifies and executes a single file action.
         """
         operation = action["operation"]
-        path = action["path"]
+        path = os.path.normpath(action["path"]).lstrip("/")
         content = action["content"]
+
+        # Security: Prevent path traversal
+        if ".." in path:
+            return {"success": False, "error": "Path traversal detected."}
+
         full_path = os.path.join(self.root_dir, path)
 
         pre_hash = self.get_file_hash(path)

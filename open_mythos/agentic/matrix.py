@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from .base import Agent, MythosAgent
+from .base import Agent, MythosAgent, OpenAIAgent, GeminiAgent
 from ..main import OpenMythos
 from ..variants import mythos_1b
 from ..tokenizer import MythosTokenizer
@@ -36,12 +36,31 @@ class AgentMatrix:
         """
         return self.agents.get(name)
 
-    def spawn_agent(self, name: str, role: str, system_prompt: str, agent_type: str = "mythos") -> Agent:
+    def spawn_agent(self, name: str, role: str, system_prompt: str, agent_type: str = "mythos", **kwargs) -> Agent:
         """
         Spawns a new agent of a specified type.
         """
         if agent_type == "mythos":
             agent = MythosAgent(name, role, system_prompt, self.model, self.tokenizer, self.tools)
+        elif agent_type == "openai":
+            agent = OpenAIAgent(
+                name=name,
+                role=role,
+                system_prompt=system_prompt,
+                api_key=kwargs.get("api_key"),
+                base_url=kwargs.get("base_url"),
+                model_name=kwargs.get("model_name"),
+                tools=self.tools
+            )
+        elif agent_type == "gemini":
+            agent = GeminiAgent(
+                name=name,
+                role=role,
+                system_prompt=system_prompt,
+                api_key=kwargs.get("api_key"),
+                model_name=kwargs.get("model_name", "gemini-1.5-pro"),
+                tools=self.tools
+            )
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
 

@@ -28,11 +28,31 @@ class FileSystemTool(Tool):
 
     @property
     def description(self) -> str:
-        return "Reads, writes, and deletes files."
+        return "Reads, writes, and deletes files. Operations: read, write, list, delete."
 
     def execute(self, operation: str, path: str, content: Optional[str] = None) -> str:
-        # Implementation logic for file system operations
-        return f"Executed {operation} on {path}"
+        try:
+            if operation == "read":
+                with open(path, "r") as f:
+                    return f.read()
+            elif operation == "write":
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w") as f:
+                    f.write(content or "")
+                return f"Successfully wrote to {path}"
+            elif operation == "list":
+                if os.path.isdir(path):
+                    return "\n".join(os.listdir(path))
+                return f"Error: {path} is not a directory."
+            elif operation == "delete":
+                if os.path.exists(path):
+                    os.remove(path)
+                    return f"Successfully deleted {path}"
+                return f"Error: {path} does not exist."
+            else:
+                return f"Error: Unknown operation {operation}"
+        except Exception as e:
+            return f"Error: {str(e)}"
 
 class ShellTool(Tool):
     @property

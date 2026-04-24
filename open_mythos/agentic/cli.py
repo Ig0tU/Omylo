@@ -84,6 +84,10 @@ def main():
     chat_parser.add_argument("--dry-run", action="store_true", help="Preview file changes without executing")
     chat_parser.add_argument("--verbose", action="store_true", help="Show detailed execution traces")
     chat_parser.add_argument("--mock", action="store_true", help="Use mock agent for demo")
+    chat_parser.add_argument("--provider", type=str, default="mythos", choices=["mythos", "openai", "gemini"], help="AI provider to use")
+    chat_parser.add_argument("--api-key", type=str, help="API key for the provider")
+    chat_parser.add_argument("--base-url", type=str, help="Base URL for OpenAI-compatible providers (LM Studio/Ollama)")
+    chat_parser.add_argument("--model-name", type=str, help="Model name for the provider")
 
     # Web command
     web_parser = subparsers.add_parser("web", help="Start the Mythos Latent WebUI")
@@ -114,9 +118,32 @@ def main():
         start_server(port=args.port)
         return
 
-    orchestrator = MythosOrchestrator(dry_run=getattr(args, 'dry_run', False), verbose=getattr(args, 'verbose', False))
+    orchestrator = MythosOrchestrator(
+        dry_run=getattr(args, 'dry_run', False),
+        verbose=getattr(args, 'verbose', False),
+        web_port=getattr(args, 'port', 8000)
+    )
+
+    # Provider configuration
+    provider = getattr(args, 'provider', 'mythos')
+    api_key = getattr(args, 'api_key', None)
+    base_url = getattr(args, 'base_url', None)
+    model_name = getattr(args, 'model_name', None)
+
     if getattr(args, 'mock', False):
-        orchestrator.matrix.spawn_agent = lambda name, role, system_prompt: CodeGenMockAgent(name, role, system_prompt)
+        orchestrator.matrix.spawn_agent = lambda name, role, system_prompt, **kwargs: CodeGenMockAgent(name, role, system_prompt)
+    elif provider != "mythos":
+        # Override spawn_agent to use the selected provider
+        original_spawn = orchestrator.matrix.spawn_agent
+        def provider_spawn(name, role, system_prompt, agent_type=provider, **kwargs):
+            # Merge CLI args with specific agent kwargs
+            spawn_kwargs = {
+                "api_key": api_key or kwargs.get("api_key"),
+                "base_url": base_url or kwargs.get("base_url"),
+                "model_name": model_name or kwargs.get("model_name")
+            }
+            return original_spawn(name, role, system_prompt, agent_type=agent_type, **spawn_kwargs)
+        orchestrator.matrix.spawn_agent = provider_spawn
 
     if args.command == "chat":
         print(f"Starting orchestration for task: {args.task}")
