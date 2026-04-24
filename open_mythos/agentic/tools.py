@@ -70,6 +70,32 @@ class ShellTool(Tool):
         except subprocess.CalledProcessError as e:
             return f"Error: {e.stderr}"
 
+class DynamicPythonTool(Tool):
+    def __init__(self, name: str, description: str, code: str):
+        self._name = name
+        self._description = description
+        self.code = code
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def description(self) -> str:
+        return self._description
+
+    def execute(self, **kwargs) -> Any:
+        # Warning: Direct execution of agent-generated code.
+        # In a production environment, this should be sandboxed.
+        namespace = {}
+        try:
+            exec(self.code, namespace)
+            if "run" in namespace:
+                return namespace["run"](**kwargs)
+            return "Error: Dynamic tool must define a 'run' function."
+        except Exception as e:
+            return f"Error executing dynamic tool {self.name}: {str(e)}"
+
 class ToolRegistry:
     """
     Registry for managing and accessing tools.
@@ -84,6 +110,11 @@ class ToolRegistry:
 
     def register_tool(self, tool: Tool):
         self.tools[tool.name] = tool
+
+    def create_dynamic_tool(self, name: str, description: str, code: str):
+        tool = DynamicPythonTool(name, description, code)
+        self.register_tool(tool)
+        return f"Tool '{name}' successfully registered and added to the matrix."
 
     def get_tool(self, name: str) -> Optional[Tool]:
         return self.tools.get(name)
