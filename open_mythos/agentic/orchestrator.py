@@ -150,7 +150,15 @@ class MythosOrchestrator:
                 self._broadcast("TOOL_RESULT", result)
                 self.memory.log_action("TOOL_RESULT", f"Tool {call['name']} result:\n{result}")
 
-        # 4. SWD Verification
+        # 4. Handle Dynamic Tool Creation
+        dynamic_tools = self.parse_dynamic_tools(output)
+        for dt in dynamic_tools:
+            self._broadcast("DYNAMIC_TOOL_CREATION", dt)
+            result = self.tools.create_dynamic_tool(dt['name'], dt['description'], dt['code'])
+            self._broadcast("DYNAMIC_TOOL_RESULT", result)
+            self.memory.log_action("DYNAMIC_TOOL", f"Agent created tool: {dt['name']}\nDescription: {dt['description']}")
+
+        # 5. SWD Verification
         actions = self.swd.parse_actions(output)
         for action in actions:
             self._broadcast("SWD_VERIFY_START", action)
@@ -160,6 +168,22 @@ class MythosOrchestrator:
 
         self._broadcast("STEP_COMPLETE", step_info)
         return output
+
+    def parse_dynamic_tools(self, output: str) -> List[Dict[str, Any]]:
+        """
+        Parses [REGISTER_TOOL] blocks from agent output.
+        Format: [REGISTER_TOOL] name | description [CODE] python_code [/CODE] [/REGISTER_TOOL]
+        """
+        tools = []
+        pattern = r"\[REGISTER_TOOL\]\s*(.*?)\s*\|\s*(.*?)\s*\[CODE\](.*?)\[/CODE\]\s*\[/REGISTER_TOOL\]"
+        matches = re.finditer(pattern, output, re.DOTALL)
+        for match in matches:
+            tools.append({
+                "name": match.group(1).strip(),
+                "description": match.group(2).strip(),
+                "code": match.group(3).strip()
+            })
+        return tools
 
     def parse_tool_calls(self, output: str) -> List[Dict[str, Any]]:
         """
